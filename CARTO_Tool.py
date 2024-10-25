@@ -113,7 +113,7 @@ class Carto(Parser_carto):
             data=pd.DataFrame(data=content,columns=[chr(ord("A")+h) if h+ord("A")<=ord("Z") else "A"+chr(h-1+2*ord("A")-ord("Z")) for h in range(content.shape[1])])
         return data
 
-    def extracting_color_coding(self):
+    def extracting_color_coding(self,triple=False):
         name=""
         for k in [m for m in [x for x,y in self.files_cat(True)] if (m.endswith(".xml") and re.search(r"(.*) (\d+-\d+-\d)",m))]:
             name+=k
@@ -134,41 +134,50 @@ class Carto(Parser_carto):
                 i_=pattern.sub(r"\1",i_)
             
             data.append({i.split("=")[0]:i.split("=")[1].strip("\"") for i in dat})
-        output=[]
-        for i in data:
-            for j in i.keys():
-                if re.search("full_name",j,re.I):
-                    if np.isin(i[j].lower(),["verde","green","orange","naranja","hsc+","hsc-","hsc"]):
-                        output.append(i)
+        output=data
+        
+        #triple extra only
+        if triple:
+            output=[]
+            for i in data:
+                for j in i.keys():
+                    if re.search("full_name",j,re.I):
+                        if np.isin(i[j].lower(),["verde","green","orange","naranja","hsc+","hsc-","hsc","pos","positive","negative","neg","ver","nar"]):
+                            output.append(i)
+        
         color_coding=[{i[k]:i[j] for k in i.keys() if re.search("id",k,re.I) for j in i.keys() if re.search("full_name",j,re.I)  }for i in output]
-        self.color_dict={**color_coding[0] ,**color_coding[1]}
+        dict={}
+        {dict.update(color_coding[i]) for i in range(len(color_coding))}
+        self.color_dict=dict
         return output
                 
     
-    def car_extract(self,colors=None):
-        if colors:
+    def car_extract(self,colors=None,triple=False):
+        if colors and not triple:
             self.color_dict=colors
+        elif triple:
+            self.extracting_color_coding(triple)
         else:
             self.extracting_color_coding()
-            self.color_dict=self.color_dict
+        self.color_dict
         data= self.Car_file().values
         labels=data[:,15]
         new_labels=[]
         for i,m in enumerate(labels) :
             if np.isin(m,list(self.color_dict.keys())): 
                 new_labels.append([self.color_dict[m], data[i,2],data[i,27],data[i,4],data[i,5],data[i,6]])
-            else: 
+            else: #print("not in defined colors") 
                 pass
-                #print("not in defined colors") 
-                #new_labels.append(["No_Label", data[i,2],data[i,27],data[i,4],data[i,5],data[i,6]])
+        if len(new_labels)==0:
+            new_labels=[[None]*6]
         return pd.DataFrame(
             np.array(new_labels),
             columns=["label_color","point number","sample","x","y","z"]
             )
     
-    def electrodes(self):
-        file_number,electrode=[],[]
-        car=self.car_extract(self.color_dict)
+    def electrodes(self,triple=False):
+        file_number,electrode,refference=[],[],[]
+        car=self.car_extract(self.color_dict,triple)
         for i in car.loc[:,"point number"].values:
         
             with open(
@@ -178,40 +187,46 @@ class Carto(Parser_carto):
                     )
                 ) as file:
                 conts=file.readlines()
-                pattern=re.compile(r".*\".*_(\d{5,8})\..*\".*")
-                pattern1=re.compile(r".*(UnipolarMappingChannel=).*\"(20A.{1,5}\d)\".*(BipolarMappingChannel=).*\"(20A.{1,5}\d)\".*")
+                pattern=re.compile(r"ECG FileName=\"([^\"]+)\"")
+                pattern1=re.compile(r"UnipolarMappingChannel=\"([^\"]+)\" BipolarMappingChannel=\"([^\"]+)\" ReferenceChannel=\"([^\"]+)\"")
 
                 for line_num,m in enumerate(conts):
                     if pattern.search(m) and pattern1.search(m):
-                        file_number.append(pattern.sub(r"\1",m).strip())
-                        electrode.append(pattern1.sub(r"\2 \4",m).strip().split())
+                        file_number.append(pattern.search(m).group(1).strip())
+                        electrode.append([pattern1.search(m).group(ii).strip() for ii in range(1,3)])
+                        refference.append(pattern1.search(m).group(3))
+            
 
         c2=pd.Series(file_number,name="file_number")
         c3=pd.DataFrame(np.array(electrode).reshape(-1,2),columns=["unipolar","bipolar"])
-
+        c4=pd.Series(refference,name="refference_chanel")
         return pd.concat(
             [
                 car[["label_color","sample","point number"]],
                 c2,
                 c3,
-                car[["x","y","z"]]
+                car[["x","y","z"]],
+                c4
                 ],
                axis=1
             )
     
     def Signals(self):
         data=self.electrodes()
+        #check to delete Nan values from the data frame
+        for i in data.columns:
+            data=data.drop(data[data[i].isnull()].index)
         content=[]
         t=0
         for i in np.unique(data["file_number"].values):
-            
-            with open(os.path.join(self.path,self.cats[self.i]+"_ECG_Export_"+i+".txt"),"r") as file:
+            t=time.time()
+            with open(os.path.join(self.path,i),"r") as file:
                 content.append([
                 data.loc[data["file_number"]==i,:].reset_index(drop=True),
-                os.path.join(self.path,self.cats[self.i]+"_ECG_Export_"+i+".txt"),
+                os.path.join(self.path,i),
                 self.construct_dataframe_signals(file.readlines())
                 ])
-            
+            print(time.time()-t)
         self.cont=content
         return content
     def construct_dataframe_signals(self,signals):
