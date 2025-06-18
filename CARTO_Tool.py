@@ -141,11 +141,11 @@ class Carto(Parser_carto):
             output=[]
             for i in data:
                 for j in i.keys():
-                    if re.search("full_name",j,re.I):
+                    if re.search("full_name",j,re.I) or re.search("Short_Name",j,re.I):
                         if np.isin(i[j].lower(),["verde","green","orange","naranja","hsc+","hsc-","hsc","pos","positive","negative","neg","ver","nar"]):
                             output.append(i)
         
-        color_coding=[{i[k]:i[j] for k in i.keys() if re.search("id",k,re.I) for j in i.keys() if re.search("full_name",j,re.I)  }for i in output]
+        color_coding=[{i[k]:i[j] for k in i.keys() if re.search("id",k,re.I) for j in i.keys() if re.search("Short_name",j,re.I)  }for i in output]
         dict={}
         {dict.update(color_coding[i]) for i in range(len(color_coding))}
         self.color_dict=dict
