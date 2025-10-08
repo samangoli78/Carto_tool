@@ -61,6 +61,7 @@ class Parser_carto:
         triangles = []
         unipolar_values = []
         bipolar_values = []
+        LAT_values = []
         main_meshes=[name for name in os.listdir(self.carto.path) if name.endswith(".mesh") and self.carto.maps[self.carto.i] in name]
         print(main_meshes)
         path=os.path.join(self.carto.path,main_meshes[0])
@@ -106,11 +107,13 @@ class Parser_carto:
                     colors = parts[1].strip().split()
                     unipolar_values.append(float(colors[0]))
                     bipolar_values.append(float(colors[1]))
+                    LAT_values.append(float(colors[2]))
         self.unipolar=np.array(unipolar_values)
         self.bipolar=np.array(bipolar_values)
+        self.LAT=np.array(LAT_values)
         self.vertices=np.array(vertices)
         self.triangles=np.array(triangles)
-        return np.array(vertices), np.array(triangles), np.array(unipolar_values), np.array(bipolar_values)
+        return np.array(vertices), np.array(triangles), np.array(unipolar_values), np.array(bipolar_values),np.array(LAT_values)
     
 
     
